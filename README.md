@@ -1,6 +1,4 @@
-# lolnetscan v1
-
-# Living off the land headless bash network scanner  🏕️
+![Screenshot](./Screenshot.png)
 
 ## Overview
 

@@ -146,6 +146,31 @@ scan_hosts() {
     done
 }
 
+
+function title() {
+    emojis=('🌴' '⛺️ ' '🛶' '🌿' '🌲' '🌳' '🌊' '🦌' '🌺' '🦋')
+    shuffled_emojis=($(shuf -e "${emojis[@]}")) 
+    # Get the current hour (24-hour format)
+    current_hour=$(date +%H)
+    # Set the dark mode if the time is between 10:00 pm and 07:00 am
+    if (( current_hour >= 22 || current_hour < 7 )); then
+        # Dark mode
+        local title_mod="BOLD_GREEN_ON_BLACK"
+        local paragraph_mod="WHITE_ON_DARK"
+    else
+        # White mode
+        local title_mod="BOLD_GREEN_ON_WHITE"
+        local paragraph_mod="BLACK_ON_WHITE"
+    fi
+    # echo -e "${color_map[On_Black]}                                 \n       Living off the land       \n       Network scaner ${shuffled_emojis[0]}         \n                                 ${NC}"
+    echo -e "\n${color_map[$title_mod]}                                  "
+    echo -e "       lolnetscan $lolnetscan_version              ${NC}${color_map[$paragraph_mod]}"
+    echo -e "                                  "
+    echo -e "       Living off the land        "
+    echo -e "       Headless bash Network      "
+    echo -e "       Scanner ${shuffled_emojis[0]}                 "
+    echo -e "                                  \n${NC}"
+}
 # Main function to parse command-line arguments and initiate scanning
 main() {
     local target=""
@@ -178,6 +203,12 @@ main() {
                 ;;
         esac
     done
+    if [ -z "$target" ]; then
+        print_message "FAL" "Error: Missing required option(s)."
+        print_usage
+        exit 1
+    fi
+    title
 
     if [ ${#ports[@]} -eq 0 ]; then
         if [ "$use_udp" = true ]; then
@@ -205,30 +236,4 @@ main() {
         fi
     fi
 }
-
-function title() {
-    emojis=('🌴' '⛺️ ' '🛶' '🌿' '🌲' '🌳' '🌊' '🦌' '🌺' '🦋')
-    shuffled_emojis=($(shuf -e "${emojis[@]}")) 
-    # Get the current hour (24-hour format)
-    current_hour=$(date +%H)
-    # Set the dark mode if the time is between 10:00 pm and 07:00 am
-    if (( current_hour >= 22 || current_hour < 7 )); then
-        # Dark mode
-        local title_mod="BOLD_GREEN_ON_BLACK"
-        local paragraph_mod="WHITE_ON_DARK"
-    else
-        # White mode
-        local title_mod="BOLD_GREEN_ON_WHITE"
-        local paragraph_mod="BLACK_ON_WHITE"
-    fi
-    # echo -e "${color_map[On_Black]}                                 \n       Living off the land       \n       Network scaner ${shuffled_emojis[0]}         \n                                 ${NC}"
-    echo -e "\n${color_map[$title_mod]}                                  "
-    echo -e "       lolnetscan $lolnetscan_version              ${NC}${color_map[$paragraph_mod]}"
-    echo -e "                                  "
-    echo -e "       Living off the land        "
-    echo -e "       Headless bash Network      "
-    echo -e "       Scanner ${shuffled_emojis[0]}                 "
-    echo -e "                                  \n${NC}"
-}
-title
 main "$@"

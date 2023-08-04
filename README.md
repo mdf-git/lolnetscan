@@ -1,6 +1,6 @@
 # lolnetscan v1
 
-# Living off the land Headless bash Network Scanner 🏕️
+# Living off the land headless bash network scanner  🏕️
 
 ## Overview
 
@@ -8,14 +8,18 @@
 
 ## Features
 
-- Scan multiple host(s) for open port(s) using the `bash` shell's built-in `/dev/tcp` feature for TCP or `netcat` for UDP protocols without using `ping`.
-- Option to discover live hosts without port enumeration using `ping`
-- Specify target hosts using comma, dash, or CIDR notation.
-- Specify port numbers using comma or dash, and even expand port ranges.
+The benefits of using `lolnetscan` in penetration testing include:
+
+1. **Stealthy Reconnaissance**: The script leverages common Linux utilities and basic network commands, making it less likely to raise suspicions during a security assessment.
+2. **Minimizes Footprint**: Since it uses existing tools and features, there's no need to upload additional scanning tools, minimizing the digital footprint on the target system.
+3. **Quick Assessment**: The script allows for quick assessment of live hosts and open ports, enabling penetration testers to focus on further exploitation.
+4. **Customization**: Penetration testers can modify the script according to their specific requirements and add features as needed.
+5. **Resource-Friendly**: The script is lightweight and doesn't require extensive system resources, making it suitable for low-resource environments.
+6. **Learning Experience**: Developing and using a custom script like this can enhance the penetration tester's understanding of network scanning techniques and bash scripting.
 
 ## Usage
 
-To scan for open ports on one or more target hosts, run the `lolnetscan.sh` script with appropriate options:
+To scan for open ports on one or more target hosts, run the `lolnetscan.sh` script with the appropriate options:
 
 ```bash
 ./lolnetscan.sh -host <target> [-p <ports>] [-u]
@@ -40,7 +44,7 @@ To scan UDP ports 53, 123, and 161 on a range of hosts, use:
 ./lolnetscan.sh -host 192.168.0.1-192.168.0.10 -p 53,123,161 -u
 ```
 
-> CIDR notation also suported Ex: 192.168.0.1/24
+> CIDR notation also supported (Ex: 192.168.0.1/24)
 
 ## Running Directly from GitHub
 
@@ -72,8 +76,8 @@ Here's an example of the output you may see while running the script:
 
 ## Notes
 
-- This tool uses Bash and some standard Linux utilities (`ping`, `nc`, and `timeout` and ``/dev/tcp` feature). Ensure you have them installed and have appropriate permissions to run network scans.
-- Always use network scanning responsibly and with permission. Unauthorized scanning of networks you do not own is illegal and unethical.
+- This tool uses the `bash` shell's built-in `/dev/tcp` feature for TCP or `netcat` for UDP protocols without using `ping`.
+- Option to discover live hosts without port enumeration using `ping`
 
 ## License
 

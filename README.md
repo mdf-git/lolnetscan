@@ -1,6 +1,7 @@
 ![Screenshot](./Screenshot.png)
 
 ## Overview
+Penetration testers often find themselves in situations where they have limited access to tools and utilities on the compromised system. In these cases, having a tool that relies on basic built-in features like `bash`, `ping`, `/dev/tcp`, and `nc` (netcat) allows the tester to perform essential network reconnaissance without arousing suspicion or attracting unwanted attention.
 
 `lolnetscan` is a simple yet powerful network scanner written in Bash. It allows you to scan hosts for open ports using TCP or UDP protocols. The tool is designed to be lightweight and efficient, making it useful for various network scanning tasks.
 

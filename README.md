@@ -1,8 +1,6 @@
 # lolnetscan v1
 
-# Living off the land        
-Headless bash Network      
-Scanner  🏕️
+# Living off the land Headless bash Network Scanner 🏕️
 
 ## Overview
 

@@ -1,0 +1,234 @@
+#!/bin/bash
+
+declare -A color_map=(
+    ["FAL"]="\e[38;2;255;3;78m"    # Failure/Error message color
+    ["INF"]="\e[94m"               # Information message color
+    ["WRN"]="\e[38;5;208m"         # Warning message color
+    ["USG"]="\e[0;90m"             # Usage guide message color
+    ["RED"]='\e[38;2;25;12;255m'  # Debug Red color
+    ["GREEN"]='\e[38;2;3;255;100m' # Green color
+    ["BOLD_GREEN_ON_BLACK"]="\033[1;32;40m"
+    ["BOLD_GREEN_ON_WHITE"]="\033[1;32;47m"
+    ["WHITE_ON_DARK"]="\033[0;37;40m"
+    ["BLACK_ON_WHITE"]="\033[0;30;47m"
+)
+NC='\033[0m' # Reset color
+
+lolnetscan_version="v1"
+print_message() {
+    local log_level="$1"
+    local message="$2"
+    local logged_message=$(echo -e "${color_map[$log_level]}[${log_level}]${NC}  ${message}")
+    echo "${logged_message}"
+}
+
+print_usage() {
+    cat <<EOF
+Usage: $0 -host <target> [-p <ports>] [-d] [-u]
+Options:
+  -host   <target>    Specify the target host(s) using comma, dash, or CIDR notation
+  -p      <ports>     Specify the port number(s) using comma or dash
+  -u                  Use UDP protocol for port scanning (default is TCP)
+EOF
+    exit 1
+}
+
+validate_ports() {
+    local input_ports=("$@")
+    local parsed_ports=()
+
+    for port_range in "${input_ports[@]}"; do
+        if [[ $port_range == *-* ]]; then
+            start_port="${port_range%-*}"
+            end_port="${port_range#*-}"
+
+            if ((start_port <= end_port)); then
+                for ((port = start_port; port <= end_port; port++)); do
+                    parsed_ports+=("$port")
+                done
+            fi
+        else
+            parsed_ports+=("$port_range")
+        fi
+    done
+    echo "${parsed_ports[@]}"
+}
+
+# Function to extract CIDR IP prefix
+extract_cidr_ip_prefix() {
+    local cidr_ip="${1%/*}"
+    local cidr_prefix="${1#*/}"
+    echo "$cidr_ip $cidr_prefix"
+}
+
+expand_ip_range() {
+    IFS=',' read -ra ip_ranges <<< "$1"
+    for range in "${ip_ranges[@]}"; do
+        if [[ "$range" == *-* ]]; then
+            start_ip="${range%-*}"
+            end_ip="${range#*-}"
+
+            IFS='.' read -ra start_ip_arr <<< "$start_ip"
+            IFS='.' read -ra end_ip_arr <<< "$end_ip"
+
+            # Convert IP octets to integer values
+            start_ip_int=$(( start_ip_arr[0] * 256**3 + start_ip_arr[1] * 256**2 + start_ip_arr[2] * 256 + start_ip_arr[3] ))
+            end_ip_int=$(( end_ip_arr[0] * 256**3 + end_ip_arr[1] * 256**2 + end_ip_arr[2] * 256 + end_ip_arr[3] ))
+
+            for ((ip_int = start_ip_int; ip_int <= end_ip_int; ip_int++)); do
+                # Convert the integer back to IP octets
+                ip_octet_1=$(( ip_int / 256**3 ))
+                ip_octet_2=$(( (ip_int / 256**2) % 256 ))
+                ip_octet_3=$(( (ip_int / 256) % 256 ))
+                ip_octet_4=$(( ip_int % 256 ))
+                echo "$ip_octet_1.$ip_octet_2.$ip_octet_3.$ip_octet_4"
+            done
+        elif [[ "$range" == */* ]]; then
+            IFS=' ' read -ra ip_prefix <<< "$(extract_cidr_ip_prefix "$range")"
+            local ip="${ip_prefix[0]}"
+            local prefix="${ip_prefix[1]}"
+
+            IFS='.' read -ra ip_arr <<< "$ip"
+
+            local num_ips=$((2**(32 - prefix)))
+            for ((ip_num = 0; ip_num < num_ips; ip_num++)); do
+                local last_octet=$((ip_num % 256))
+                local third_octet=$(((ip_num / 256) % 256))
+                echo "${ip_arr[0]}.${ip_arr[1]}.${third_octet}.$last_octet"
+            done
+        else
+            echo "$range"
+        fi
+    done
+}
+
+# Function to scan hosts for open ports using TCP/UDP
+scan_hosts() {
+    local target="$1"
+    local protocol="$2"
+    shift 2
+    local ports=("$@")
+
+    local target_list=()
+    IFS=$'\n' read -rd '' -a target_list < <(expand_ip_range "$target")
+
+    local valid_ports=()
+    local invalid_ports=()
+
+    for port in "${ports[@]}"; do
+        if ! [[ "$port" =~ ^[0-9]+$ ]] || ((port < 1 || port > 65535)); then
+            invalid_ports+=("$port")
+        else
+            valid_ports+=("$port")
+        fi
+    done
+
+    if [ ${#invalid_ports[@]} -gt 0 ]; then
+        print_message "WRN" "Invalid ports, will not be used for check: ${color_map[FAL]}${invalid_ports[*]}${NC}"
+    fi
+
+    # Perform scanning for valid ports
+    for target in "${target_list[@]}"; do
+        for port in "${valid_ports[@]}"; do
+            if [ "$protocol" = "UDP" ]; then
+                if nc -zu -w 1 "$target" "$port" >/dev/null 2>&1; then
+                    print_message "INF" "Open $protocol port $target:$port"
+                else
+                    print_message "INF" "Closed or filtered $protocol port $target:$port"
+                fi
+            else
+                # Check if the port is open using a headless connection attempt (TCP)
+                if timeout 1 bash -c "echo >/dev/tcp/$target/$port" >/dev/null 2>&1; then
+                    print_message "INF" "Open $protocol port $target:$port"
+                fi
+            fi
+        done
+    done
+}
+
+# Main function to parse command-line arguments and initiate scanning
+main() {
+    local target=""
+    local ports=()
+    local use_udp=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -host)
+                shift
+                target="$1"
+                shift
+                ;;
+            -u)
+                use_udp=true
+                shift
+                ;;
+            -p)
+                shift
+                IFS=',' read -ra input_ports <<< "$1"
+                ports=($(validate_ports "${input_ports[@]}"))
+                shift
+                ;;
+            -v)
+                echo "$lolnetscan_version"
+                ;;
+            *)
+                print_message "FAL" "Error: Invalid option or value: $1"
+                print_usage
+                ;;
+        esac
+    done
+
+    if [ ${#ports[@]} -eq 0 ]; then
+        if [ "$use_udp" = true ]; then
+            print_message "FAL" "Option -u can be used only if -p provided followed by port(s)"
+            print_usage
+        fi
+        # No ports specified, only check for live hosts
+        for target_ip in $(expand_ip_range "$target"); do
+            if ping -c 1 -W 1 "$target_ip" >/dev/null 2>&1; then
+                print_message "INF" "Host $target_ip is ${color_map[GREEN]}alive${NC}"
+            else
+                print_message "INF" "Host $target_ip is ${color_map[RED]}down${NC}"
+            fi
+        done
+    else
+        if [ "$use_udp" = true ]; then
+            if ! command -v nc &>/dev/null; then
+                print_message "INF" "UDP port scanning requires the 'nc' (netcat) tool."
+                print_message "USG" "apt-get install -y --no-install-recommends netcat"
+            fi
+            print_message "INF" "Using tool 'nc' (netcat) for UDP port check"
+            scan_hosts "$target" "UDP" "${ports[@]}"
+        else
+            scan_hosts "$target" "TCP" "${ports[@]}"
+        fi
+    fi
+}
+
+function title() {
+    emojis=('🌴' '⛺️ ' '🛶' '🌿' '🌲' '🌳' '🌊' '🦌' '🌺' '🦋')
+    shuffled_emojis=($(shuf -e "${emojis[@]}")) 
+    # Get the current hour (24-hour format)
+    current_hour=$(date +%H)
+    # Set the dark mode if the time is between 10:00 pm and 07:00 am
+    if (( current_hour >= 22 || current_hour < 7 )); then
+        # Dark mode
+        local title_mod="BOLD_GREEN_ON_BLACK"
+        local paragraph_mod="WHITE_ON_DARK"
+    else
+        # White mode
+        local title_mod="BOLD_GREEN_ON_WHITE"
+        local paragraph_mod="BLACK_ON_WHITE"
+    fi
+    # echo -e "${color_map[On_Black]}                                 \n       Living off the land       \n       Network scaner ${shuffled_emojis[0]}         \n                                 ${NC}"
+    echo -e "\n${color_map[$title_mod]}                                  "
+    echo -e "       lolnetscan $lolnetscan_version              ${NC}${color_map[$paragraph_mod]}"
+    echo -e "                                  "
+    echo -e "       Living off the land        "
+    echo -e "       Headless bash Network      "
+    echo -e "       Scanner ${shuffled_emojis[0]}                 "
+    echo -e "                                  \n${NC}"
+}
+title
+main "$@"

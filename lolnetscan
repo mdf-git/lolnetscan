@@ -168,7 +168,7 @@ scan_hosts() {
     for target in "${target_list[@]}"; do
         for port in "${valid_ports[@]}"; do
             if [ "$protocol" = "UDP" ]; then
-                if nc -zu -w 1 "$target" "$port" >/dev/null 2>&1; then
+                if nc -zu -w1 "$target" "$port" >/dev/null 2>&1; then
                     print_message "INF" "Open $protocol port $target:$port"
                 else
                     print_message "INF" "Closed or filtered $protocol port $target:$port"
@@ -177,6 +177,8 @@ scan_hosts() {
                 # Check if the port is open using a headless connection attempt (TCP)
                 if timeout 1 bash -c "echo >/dev/tcp/$target/$port" >/dev/null 2>&1; then
                     print_message "INF" "Open $protocol port $target:$port"
+                else
+                    print_message "INF" "Closed $protocol port $target:$port"
                 fi
             fi
         done

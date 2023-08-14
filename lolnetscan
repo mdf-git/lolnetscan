@@ -21,6 +21,38 @@ print_message() {
     local logged_message=$(echo -e "${color_map[$log_level]}[${log_level}]${NC}  ${message}")
     echo "${logged_message}"
 }
+check_os() {
+    local debian_based=("debian" "ubuntu" "linuxmint" "kali")
+    local os=$(awk -F= '/^ID=/{print $2}' /etc/os-release)
+
+    if ! [[ " ${debian_based[@]} " =~ " ${os} " ]]; then
+        print_message "FAL" "Error: This script is intended for use on Debian-based operating systems (e.g., Debian, Ubuntu, Linux Mint)."
+        exit 1
+    fi
+}
+
+check_dependencies() {
+    declare -A dependencies_map=(
+    ["nc"]="netcat-openbsd"   # Netcat
+    ["shuf"]="coreutils"   # Coreutils
+    ["ping"]="iputils-ping" 
+)
+
+    local missing_dependencies=()
+
+    for dependency in "${!dependencies_map[@]}"; do
+        if ! command -v "$dependency" &>/dev/null; then
+            missing_dependencies+=("${dependencies_map[$dependency]}")
+        fi
+    done
+
+    if [ ${#missing_dependencies[@]} -gt 0 ]; then
+        print_message "FAL" "Error: The following dependencies are missing: ${missing_dependencies[*]}"
+        print_message "INF" "Please install them using the following command:"
+        print_message "USG" "sudo apt-get install ${missing_dependencies[*]}"
+        exit 1
+    fi
+}
 
 print_usage() {
     cat <<EOF
@@ -53,12 +85,24 @@ validate_ports() {
     done
     echo "${parsed_ports[@]}"
 }
-
 # Function to extract CIDR IP prefix
 extract_cidr_ip_prefix() {
     local cidr_ip="${1%/*}"
     local cidr_prefix="${1#*/}"
     echo "$cidr_ip $cidr_prefix"
+}
+
+# Function to convert IP address to an integer
+ip_to_int() {
+    local ip=$1
+    IFS='.' read -r i1 i2 i3 i4 <<< "$ip"
+    echo $(( (i1 << 24) + (i2 << 16) + (i3 << 8) + i4 ))
+}
+
+# Function to convert an integer to an IP address
+int_to_ip() {
+    local int_ip=$1
+    echo "$(( (int_ip >> 24) & 255 )).$(( (int_ip >> 16) & 255 )).$(( (int_ip >> 8) & 255 )).$(( int_ip & 255 ))"
 }
 
 expand_ip_range() {
@@ -68,33 +112,26 @@ expand_ip_range() {
             start_ip="${range%-*}"
             end_ip="${range#*-}"
 
-            IFS='.' read -ra start_ip_arr <<< "$start_ip"
-            IFS='.' read -ra end_ip_arr <<< "$end_ip"
-
-            # Convert IP octets to integer values
-            start_ip_int=$(( start_ip_arr[0] * 256**3 + start_ip_arr[1] * 256**2 + start_ip_arr[2] * 256 + start_ip_arr[3] ))
-            end_ip_int=$(( end_ip_arr[0] * 256**3 + end_ip_arr[1] * 256**2 + end_ip_arr[2] * 256 + end_ip_arr[3] ))
+            start_ip_int=$(ip_to_int "$start_ip")
+            end_ip_int=$(ip_to_int "$end_ip")
 
             for ((ip_int = start_ip_int; ip_int <= end_ip_int; ip_int++)); do
-                # Convert the integer back to IP octets
-                ip_octet_1=$(( ip_int / 256**3 ))
-                ip_octet_2=$(( (ip_int / 256**2) % 256 ))
-                ip_octet_3=$(( (ip_int / 256) % 256 ))
-                ip_octet_4=$(( ip_int % 256 ))
-                echo "$ip_octet_1.$ip_octet_2.$ip_octet_3.$ip_octet_4"
+                echo "$(int_to_ip "$ip_int")"
             done
         elif [[ "$range" == */* ]]; then
             IFS=' ' read -ra ip_prefix <<< "$(extract_cidr_ip_prefix "$range")"
             local ip="${ip_prefix[0]}"
             local prefix="${ip_prefix[1]}"
 
-            IFS='.' read -ra ip_arr <<< "$ip"
-
             local num_ips=$((2**(32 - prefix)))
-            for ((ip_num = 0; ip_num < num_ips; ip_num++)); do
-                local last_octet=$((ip_num % 256))
-                local third_octet=$(((ip_num / 256) % 256))
-                echo "${ip_arr[0]}.${ip_arr[1]}.${third_octet}.$last_octet"
+            ip_int=$(ip_to_int "$ip")
+
+            # Calculate the network address and broadcast address
+            network_address=$((ip_int & ~(num_ips - 1)))
+            broadcast_address=$((network_address + num_ips - 1))
+
+            for ((ip_num = network_address + 1; ip_num < broadcast_address; ip_num++)); do
+                echo "$(int_to_ip "$ip_num")"
             done
         else
             echo "$range"
@@ -203,6 +240,10 @@ main() {
                 ;;
         esac
     done
+
+check_os
+check_dependencies
+
     if [ -z "$target" ]; then
         print_message "FAL" "Error: Missing required option(s)."
         print_usage
